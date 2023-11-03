@@ -6,6 +6,7 @@
 #include "PIDParameters.h"
 #include "StepperConfig.h"
 #include "A4954.h"
+#include "AS5047.h"
 #include "PositionSensor.h"
 #include "DirectIO.h"
 

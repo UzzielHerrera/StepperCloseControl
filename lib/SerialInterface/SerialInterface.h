@@ -19,5 +19,6 @@ void printParametersEditPositionControl();
 void printParametersEditVelocityControl();
 void printParametersEditOther();
 void antiCoggingCalibration();
+void stepResponse();
 
 #endif
