@@ -13,7 +13,7 @@ u16_t readAngle(){
         delay(5);
     }
 
-    closeLoopEnable();
+    // closeLoopEnable();
 
     return lookup[encoderReading / avg];
 }

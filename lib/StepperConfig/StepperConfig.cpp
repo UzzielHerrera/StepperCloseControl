@@ -19,7 +19,8 @@ volatile float vKd = 0.0;
 volatile float vLPF = 100.0;
 
 // --- Lookup table
-const float __attribute__((__aligned__(256))) lookup[16384] = {
+// const float __attribute__((__aligned__(256))) lookup[16384] = {
+const float lookup[16384] = {
 //Put lookup table here!
 };
 

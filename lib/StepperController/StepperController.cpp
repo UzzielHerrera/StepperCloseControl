@@ -1,4 +1,5 @@
 #include "StepperController.h"
+#include "SerialInterface.h"
 
 hw_timer_t *controllerTimer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
@@ -98,7 +99,165 @@ void closeLoopDisable() {
 }
 
 void calibrate() {
+    int encoderReading = 0;
+    int currentEncoderReading = 0;
+    int lastEncoderReading = 0;
+    int avg = 10;
 
+    int iStart = 0;
+    int jStart = 0;
+    int stepNum = 0;
+
+    int fullStepReadings[steps_per_revolution];
+    int fullStep = 0;
+    int ticks = 0;
+    float lookUpAngle = 0.0;
+    SerialUSB.println("Beginning calibration routine");
+
+    encoderReading = readRawAngle();
+    dir = true;
+    oneStep();
+    delay(500);
+
+    if(readRawAngle() - encoderReading < 0){
+        SerialUSB.println("Wired backwards");
+        return;
+    }
+
+    while(stepNumber != 0){
+        dir = (stepNumber > 0) ? true : false;
+        oneStep();
+        delay(100);
+    }
+
+    for(int x = 0; x < steps_per_revolution; x ++){
+        encoderReading = 0;
+        delay(20);
+        lastEncoderReading = readRawAngle();
+        for(int reading = 0; reading < avg; reading++){
+            currentEncoderReading = readRawAngle();
+
+            if((currentEncoderReading - lastEncoderReading) < (-(count_per_revolution / 2))){
+                currentEncoderReading += count_per_revolution;
+            }
+            else if((currentEncoderReading - lastEncoderReading) > (+(count_per_revolution / 2))){
+                currentEncoderReading -= count_per_revolution;
+            }
+
+            encoderReading += currentEncoderReading;
+            delay(10);
+            lastEncoderReading = currentEncoderReading;
+        }
+
+        encoderReading = encoderReading / avg;
+        if (encoderReading > count_per_revolution)
+            encoderReading -= count_per_revolution;
+        else if(encoderReading < 0)
+        encoderReading += count_per_revolution;
+
+        fullStepReadings[x] = encoderReading;
+        if (x % 20 == 0) {
+            SerialUSB.println();
+            SerialUSB.print(100 * x / steps_per_revolution);
+            SerialUSB.print("% ");
+        } else {
+            SerialUSB.print('.');
+        }
+
+        oneStep();
+    }
+
+    SerialUSB.println();
+
+    for(int i = 0; i < steps_per_revolution; i++){
+        ticks = fullStepReadings[mod(i + 1, steps_per_revolution)] - fullStepReadings[mod(i, steps_per_revolution)];
+        if( ticks < -15000){
+            ticks += count_per_revolution;
+        }
+        else if(ticks > 15000) {
+            ticks -= count_per_revolution;
+        }
+
+        if(ticks > 1){
+            for(int j = 0; j < ticks; j++){
+                stepNum = mod(fullStepReadings[i] + j, count_per_revolution);
+                if(stepNum == 0){
+                    iStart = i;
+                    jStart = j;
+                }
+            }
+        }
+
+        if(ticks < 1){
+            for(int j = -ticks; j > 0; j--){
+                stepNum = mod(fullStepReadings[ steps_per_revolution - 1 - i] + j, count_per_revolution);
+                if(stepNum == 0){
+                    iStart = i;
+                    jStart = j;
+                }
+            }
+        }
+    }
+
+    // store lookup table
+    for( int i = iStart; i  < (iStart + steps_per_revolution + 1); i ++){
+        ticks = fullStepReadings[mod((i + 1), steps_per_revolution)] - fullStepReadings[mod(i, steps_per_revolution)];
+
+        if(ticks < -15000){
+            ticks += count_per_revolution;
+        }
+        else if(ticks > 15000){
+            ticks -= count_per_revolution;
+        }
+
+        if(ticks > 1){
+            if(i == iStart){
+                for(int j = jStart; j < ticks; j++){
+                    lookUpAngle = 0.001 * mod(1000 * ((angle_per_step * i) + ((angle_per_step * j) / float(ticks))), 360000.0);
+                    SerialUSB.print(lookUpAngle);
+                    SerialUSB.print(", ");
+                }
+            }
+            else if(i == (iStart + steps_per_revolution)){
+                for(int j = 0; j < jStart; j++){
+                    lookUpAngle = 0.001 * mod(1000 * ((angle_per_step * i) + ((angle_per_step * j) / float(ticks))), 360000.0);
+                    SerialUSB.print(lookUpAngle);
+                    SerialUSB.print(", ");
+                }
+            }
+            else{
+                for(int j = 0; j < ticks; j++){
+                    lookUpAngle = 0.001 * mod(1000 * ((angle_per_step * i) + ((angle_per_step * j ) / float(ticks))), 360000.0);
+                    SerialUSB.print(lookUpAngle);
+                    SerialUSB.print(" , ");
+                }
+            }
+        }
+        else if (ticks < 1) {             //similar to above... for case when encoder counts were decreasing during cal routine
+            if (i == iStart) {
+                for (int j = - ticks; j > (jStart); j--) {
+                    lookUpAngle = 0.001 * mod(1000 * (angle_per_step * (i) + (angle_per_step * ((ticks + j)) / float(ticks))), 360000.0);
+                    SerialUSB.print(lookUpAngle);
+                    SerialUSB.print(" , ");
+                }
+            }
+            else if (i == iStart + steps_per_revolution) {
+                for (int j = jStart; j > 0; j--) {
+                    lookUpAngle = 0.001 * mod(1000 * (angle_per_step * (i) + (angle_per_step * ((ticks + j)) / float(ticks))), 360000.0);
+                    SerialUSB.print(lookUpAngle);
+                    SerialUSB.print(" , ");
+                }
+            }
+            else {
+                for (int j = - ticks; j > 0; j--) {
+                    lookUpAngle = 0.001 * mod(1000 * (angle_per_step * (i) + (angle_per_step * ((ticks + j)) / float(ticks))), 360000.0);
+                    SerialUSB.print(lookUpAngle);
+                    SerialUSB.print(" , ");
+                }
+            }
+        }
+    }
+    SerialUSB.println(" ");
 }
 
 void oneStep(){

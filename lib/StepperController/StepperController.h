@@ -17,6 +17,5 @@ void closeLoopDisable();
 void oneStep();
 void calibrate();
 void hybridControl();
-void openLoop();
 
 #endif
